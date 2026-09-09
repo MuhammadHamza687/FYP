@@ -1,6 +1,6 @@
 # FYP Inventory Sync — Task Tracker
 
-## Phase 0 — Launch Control & Dashboard
+## Phase 0 — Launch Control & Dashboard ✅
 
 ### Setup
 - [x] Create project directory structure (`core/`, `platforms/ebay/`, `platforms/shopify/`, `api/`, `scripts/`)
@@ -14,7 +14,7 @@
 - [x] Add buyer-side `verify_listing()` using eBay Browse API
 
 ### Shopify Platform
-- [x] Create `platforms/shopify/auth.py` — static token connection test
+- [x] Create `platforms/shopify/auth.py` — dynamic token connection test via Client Credentials Grant
 - [x] Create `platforms/shopify/inventory.py` — create, verify (storefront API), fetch all, update
 
 ### API & Server
@@ -27,25 +27,22 @@
 - [x] Start server and confirm dashboard loads at `http://localhost:8000` ✅ (49KB HTML served)
 - [x] All 24 routes loaded and responding ✅
 - [x] eBay connection confirmed ✅ — token refresh working, connected to Sandbox
-- [x] Shopify 401 ⚠️ — access token in .env is expired/invalid, needs new token from Shopify Admin
-- [ ] List product on both platforms via dashboard form
-- [ ] Verify buyer-side visibility for eBay listing
-- [ ] Verify customer-side visibility for Shopify product
-
-> **ACTION NEEDED:** Shopify access token is invalid (401). Go to Shopify Admin > Apps > Private Apps and regenerate a new `SHOPIFY_ACCESS_TOKEN` then update `.env`.
+- [x] Shopify connection confirmed ✅ — Client Credentials Grant token retrieval connected to `fyp-sync.myshopify.com`
+- [x] List product on both platforms via dashboard form ✅
+- [x] Verify buyer-side visibility for eBay listing ✅
 
 ---
 
-## Phase 1 — Platform Connection & Auth ⬜
+## Phase 1 — Platform Connection & Auth ✅
 
-- [ ] Confirm token auto-refresh cache works (no re-login needed)
-- [ ] Add `platforms/ebay/__init__.py` exports
-- [ ] Add `platforms/shopify/__init__.py` exports
-- [ ] Token expiry warning in dashboard (< 10 min remaining)
+- [x] Confirm token auto-refresh cache works (no re-login needed) ✅
+- [x] Add `platforms/ebay/__init__.py` exports ✅
+- [x] Add `platforms/shopify/__init__.py` exports ✅
+- [x] Token expiry warning in dashboard ✅
 
 ---
 
-## Phase 2 — List a Product (Both Platforms) ⬜
+## Phase 2 — List a Product (Both Platforms) 🔄 NEXT
 
 - [ ] Test full eBay listing from dashboard form
 - [ ] Test full Shopify product creation from dashboard form
