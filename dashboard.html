@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FYP Inventory Sync — Control Dashboard</title>
+  <meta name="description" content="Multi-Channel Inventory & Order Synchronization System — Shopify + eBay Control Panel" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ══════════════════════════════════════════════════
+       DESIGN TOKENS
+    ══════════════════════════════════════════════════ */
+    :root {
+      --bg-base:       #0a0d14;
+      --bg-surface:    #0f1420;
+      --bg-card:       #141927;
+      --bg-elevated:   #1a2035;
+      --border:        rgba(255,255,255,0.07);
+      --border-glow:   rgba(99,102,241,0.3);
+
+      --text-primary:  #f1f5f9;
+      --text-secondary:#94a3b8;
+      --text-muted:    #475569;
+
+      --accent:        #6366f1;       /* indigo */
+      --accent-glow:   rgba(99,102,241,0.15);
+      --ebay-color:    #f59e0b;       /* amber */
+      --ebay-glow:     rgba(245,158,11,0.15);
+      --shopify-color: #10b981;       /* emerald */
+      --shopify-glow:  rgba(16,185,129,0.15);
+      --success:       #22c55e;
+      --danger:        #ef4444;
+      --warning:       #f59e0b;
+
+      --sidebar-w:     240px;
+      --header-h:      60px;
+      --radius:        12px;
+      --radius-sm:     8px;
+      --shadow:        0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ══ Scrollbar ══ */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-surface); }
+    ::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 3px; }
+
+    /* ══════════════════════════════════════════════════
+       SIDEBAR
+    ══════════════════════════════════════════════════ */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      z-index: 100;
+    }
+
+    .sidebar-logo {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo h1 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 2px;
+    }
+    .sidebar-logo p {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .sidebar-section-label {
+      padding: 20px 20px 6px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .sidebar-nav { flex: 1; padding: 8px 12px; }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: all 0.18s ease;
+      margin-bottom: 2px;
+      user-select: none;
+    }
+    .nav-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .nav-item.active { background: var(--accent-glow); color: var(--accent); border: 1px solid rgba(99,102,241,0.2); }
+    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+
+    .sidebar-server {
+      padding: 16px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .server-status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      font-size: 12px;
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.green { background: var(--success); box-shadow: 0 0 6px var(--success); animation: pulse 2s infinite; }
+    .status-dot.red   { background: var(--danger); }
+    .status-dot.yellow{ background: var(--warning); }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.5; }
+    }
+
+    /* ══════════════════════════════════════════════════
+       MAIN LAYOUT
+    ══════════════════════════════════════════════════ */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ══ Header ══ */
+    .header {
+      height: var(--header-h);
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    .ngrok-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-secondary);
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .ngrok-pill:hover { border-color: var(--accent); color: var(--text-primary); }
+
+    /* ══ Page Content ══ */
+    .page-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px;
+    }
+
+    /* ══════════════════════════════════════════════════
+       CARDS & PANELS
+    ══════════════════════════════════════════════════ */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: rgba(255,255,255,0.12); }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .section { margin-bottom: 24px; }
+    .section-title {
+      font-size: 18px; font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+
+    /* ══ Platform Status Cards ══ */
+    .platform-card {
+      border-radius: var(--radius);
+      padding: 20px;
+      border: 1px solid;
+      position: relative;
+      overflow: hidden;
+    }
+    .platform-card.ebay {
+      background: linear-gradient(135deg, rgba(245,158,11,0.05) 0%, var(--bg-card) 100%);
+      border-color: rgba(245,158,11,0.2);
+    }
+    .platform-card.shopify {
+      background: linear-gradient(135deg, rgba(16,185,129,0.05) 0%, var(--bg-card) 100%);
+      border-color: rgba(16,185,129,0.2);
+    }
+    .platform-card .glow-bg {
+      position: absolute;
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      top: -30px; right: -30px;
+      opacity: 0.08;
+    }
+    .platform-card.ebay .glow-bg { background: var(--ebay-color); }
+    .platform-card.shopify .glow-bg { background: var(--shopify-color); }
+
+    .platform-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .platform-icon { font-size: 28px; }
+    .platform-name { font-size: 16px; font-weight: 700; }
+    .platform-env { font-size: 11px; color: var(--text-muted); }
+
+    .platform-card.ebay .platform-name { color: var(--ebay-color); }
+    .platform-card.shopify .platform-name { color: var(--shopify-color); }
+
+    .platform-meta { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.7; }
+    .platform-meta span { color: var(--text-primary); font-weight: 500; }
+
+    /* ══ Status Badge ══ */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .badge.success { background: rgba(34,197,94,0.12); color: var(--success); border: 1px solid rgba(34,197,94,0.2); }
+    .badge.error   { background: rgba(239,68,68,0.12);  color: var(--danger);  border: 1px solid rgba(239,68,68,0.2); }
+    .badge.warning { background: rgba(245,158,11,0.12); color: var(--warning); border: 1px solid rgba(245,158,11,0.2); }
+    .badge.info    { background: rgba(99,102,241,0.12); color: var(--accent);  border: 1px solid rgba(99,102,241,0.2); }
+
+    /* ══ Buttons ══ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.18s;
+      text-decoration: none;
+      font-family: 'Inter', sans-serif;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover:not(:disabled) { background: #4f46e5; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.4); }
+    .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); }
+    .btn-secondary:hover:not(:disabled) { border-color: rgba(255,255,255,0.2); }
+    .btn-ebay { background: rgba(245,158,11,0.15); color: var(--ebay-color); border: 1px solid rgba(245,158,11,0.3); }
+    .btn-ebay:hover:not(:disabled) { background: rgba(245,158,11,0.25); }
+    .btn-shopify { background: rgba(16,185,129,0.15); color: var(--shopify-color); border: 1px solid rgba(16,185,129,0.3); }
+    .btn-shopify:hover:not(:disabled) { background: rgba(16,185,129,0.25); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .btn-full { width: 100%; justify-content: center; }
+
+    /* ══ Form ══ */
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .form-control {
+      width: 100%;
+      padding: 9px 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: 13.5px;
+      font-family: 'Inter', sans-serif;
+      transition: border-color 0.18s;
+      outline: none;
+    }
+    .form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+    .form-control::placeholder { color: var(--text-muted); }
+    textarea.form-control { resize: vertical; min-height: 80px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+    /* ══ Table ══ */
+    .table-wrap { overflow-x: auto; border-radius: var(--radius-sm); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { border-bottom: 1px solid var(--border); }
+    th { padding: 10px 14px; text-align: left; font-size: 11.5px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    td { padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text-secondary); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    td.bold { color: var(--text-primary); font-weight: 500; }
+
+    /* ══ Log Panel ══ */
+    .log-panel {
+      background: var(--bg-base);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      max-height: 280px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+    }
+    .log-entry { padding: 3px 0; line-height: 1.5; }
+    .log-entry.success { color: var(--success); }
+    .log-entry.error   { color: var(--danger); }
+    .log-entry.info    { color: var(--accent); }
+    .log-entry.warning { color: var(--warning); }
+    .log-entry.muted   { color: var(--text-muted); }
+    .log-time { color: var(--text-muted); margin-right: 8px; }
+
+    /* ══ Result Panel ══ */
+    .result-panel {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .result-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .result-row:last-child { border-bottom: none; }
+    .result-label { color: var(--text-muted); font-size: 12px; }
+    .result-value { color: var(--text-primary); font-weight: 500; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    .result-value a { color: var(--accent); text-decoration: none; }
+    .result-value a:hover { text-decoration: underline; }
+
+    /* ══ Spinner ══ */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ══ Tabs ══ */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .tab-btn {
+      padding: 10px 18px;
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.18s;
+      font-family: 'Inter', sans-serif;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-btn:hover { color: var(--text-primary); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ══ Stat Cards ══ */
+    .stat-card {
+      padding: 18px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); line-height: 1; }
+    .stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ══ Divider ══ */
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    /* ══ Inline Flex Utils ══ */
+    .flex { display: flex; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; }
+    .gap-8 { gap: 8px; }
+    .gap-12 { gap: 12px; }
+    .mb-16 { margin-bottom: 16px; }
+    .mt-12 { margin-top: 12px; }
+
+    /* ══ Page Sections (tabs) ══ */
+    .page { display: none; }
+    .page.active { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════ SIDEBAR ═══════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>⚡ FYP Sync</h1>
+    <p>Inventory Control Dashboard</p>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="sidebar-section-label">Navigation</div>
+    <div class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')">
+      <span class="icon">📊</span> Dashboard
+    </div>
+    <div class="nav-item" id="nav-list" onclick="showPage('list')">
+      <span class="icon">➕</span> List Product
+    </div>
+    <div class="nav-item" id="nav-listings" onclick="showPage('listings'); loadListings()">
+      <span class="icon">📦</span> All Listings
+    </div>
+    <div class="nav-item" id="nav-verify" onclick="showPage('verify')">
+      <span class="icon">🔍</span> Verify Listing
+    </div>
+    <div class="nav-item" id="nav-logs" onclick="showPage('logs')">
+      <span class="icon">📋</span> Activity Logs
+    </div>
+
+    <div class="sidebar-section-label" style="margin-top:12px;">Platforms</div>
+    <div class="nav-item" onclick="testEbay()">
+      <span class="icon">🏪</span> Test eBay
+    </div>
+    <div class="nav-item" onclick="testShopify()">
+      <span class="icon">🛍️</span> Test Shopify
+    </div>
+  </nav>
+
+  <div class="sidebar-server">
+    <div class="server-status-bar">
+      <div class="status-dot green" id="server-dot"></div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:600;color:var(--text-primary)">FastAPI Server</div>
+        <div style="font-size:11px;color:var(--text-muted)" id="sidebar-port">Port 8000</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<div class="main">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-title" id="page-title">📊 Dashboard Overview</div>
+    <div class="header-right">
+      <div class="ngrok-pill" id="ngrok-pill" onclick="copyNgrok()" title="Click to copy">
+        <span>🌐</span>
+        <span id="ngrok-url-display">Fetching ngrok URL...</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="refreshStatus()">🔄 Refresh</button>
+    </div>
+  </header>
+
+  <!-- Page Content -->
+  <div class="page-content">
+
+    <!-- ═══════ PAGE: DASHBOARD ═══════ -->
+    <div class="page active" id="page-dashboard">
+
+      <!-- Stats Row -->
+      <div class="grid-3 section">
+        <div class="stat-card">
+          <div class="stat-label">eBay Listings</div>
+          <div class="stat-value" id="stat-ebay-count">—</div>
+          <div class="stat-sub">Sandbox environment</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Shopify Products</div>
+          <div class="stat-value" id="stat-shopify-count">—</div>
+          <div class="stat-sub">Live store</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Synced SKUs</div>
+          <div class="stat-value" id="stat-synced-count">—</div>
+          <div class="stat-sub">On both platforms</div>
+        </div>
+      </div>
+
+      <!-- Platform Status Cards -->
+      <div class="section">
+        <div class="section-title">Platform Connections</div>
+        <div class="grid-2">
+
+          <!-- eBay Card -->
+          <div class="platform-card ebay" id="ebay-card">
+            <div class="glow-bg"></div>
+            <div class="platform-header">
+              <span class="platform-icon">🏪</span>
+              <div>
+                <div class="platform-name">eBay</div>
+                <div class="platform-env">Sandbox Environment</div>
+              </div>
+              <div class="badge warning" id="ebay-badge" style="margin-left:auto">⏳ Checking...</div>
+            </div>
+            <div class="platform-meta" id="ebay-meta">
+              <div>Seller: <span>Loading...</span></div>
+              <div>Token: <span id="ebay-token-info">—</span></div>
+            </div>
+            <button class="btn btn-ebay btn-sm" onclick="testEbay()" id="btn-test-ebay">
+              🔄 Test Connection
+            </button>
+          </div>
+
+          <!-- Shopify Card -->
+          <div class="platform-card shopify" id="shopify-card">
+            <div class="glow-bg"></div>
+            <div class="platform-header">
+              <span class="platform-icon">🛍️</span>
+              <div>
+                <div class="platform-name">Shopify</div>
+                <div class="platform-env">Live Store</div>
+              </div>
+              <div class="badge warning" id="shopify-badge" style="margin-left:auto">⏳ Checking...</div>
+            </div>
+            <div class="platform-meta" id="shopify-meta">
+              <div>Shop: <span>Loading...</span></div>
+              <div>Plan: <span id="shopify-plan-info">—</span></div>
+            </div>
+            <button class="btn btn-shopify btn-sm" onclick="testShopify()" id="btn-test-shopify">
+              🔄 Test Connection
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ngrok / Server Control -->
+      <div class="section">
+        <div class="section-title">Server & Tunnel</div>
+        <div class="card">
+          <div class="flex-between mb-16">
+            <div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:4px">🚀 FastAPI Server</div>
+              <div style="font-size:12px;color:var(--text-muted)">Running on localhost:8000 with hot-reload</div>
+            </div>
+            <div class="badge success">✅ Running</div>
+          </div>
+
+          <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;font-weight:600;">🌐 ngrok Public URL</div>
+          <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:13px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+            <span id="ngrok-full-url" style="color:var(--accent)">Fetching...</span>
+            <button class="btn btn-secondary btn-sm" onclick="copyNgrok()">📋 Copy</button>
+          </div>
+
+          <div style="font-size:12px;color:var(--text-muted)">
+            💡 To start ngrok manually: <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;">python scripts/start_server.py</code>
+            or <code style="background:var(--bg-elevated);padding:2px 6px;border-radius:4px;">ngrok http 8000</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Log -->
+      <div class="section">
+        <div class="flex-between mb-16">
+          <div class="section-title" style="margin-bottom:0">Activity Log</div>
+          <button class="btn btn-secondary btn-sm" onclick="clearLog()">🗑️ Clear</button>
+        </div>
+        <div class="log-panel" id="main-log">
+          <div class="log-entry muted"><span class="log-time">[00:00:00]</span> Dashboard initialized...</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ═══════ PAGE: LIST PRODUCT ═══════ -->
+    <div class="page" id="page-list">
+      <div class="section-title">➕ List New Product</div>
+
+      <div class="grid-2" style="align-items:start">
+
+        <!-- Form -->
+        <div class="card">
+          <div class="card-title">📝 Product Details</div>
+
+          <div class="form-group">
+            <label class="form-label">Title *</label>
+            <input class="form-control" id="f-title" type="text" placeholder="e.g. Blue Wireless Headphones" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" id="f-desc" placeholder="Product description..."></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">SKU *</label>
+              <input class="form-control" id="f-sku" type="text" placeholder="e.g. PROD-001" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Category ID (eBay)</label>
+              <input class="form-control" id="f-category" type="text" value="9355" placeholder="9355" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Price (USD) *</label>
+              <input class="form-control" id="f-price" type="number" step="0.01" placeholder="19.99" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Quantity *</label>
+              <input class="form-control" id="f-qty" type="number" placeholder="10" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Condition</label>
+            <select class="form-control" id="f-condition">
+              <option value="NEW">New</option>
+              <option value="LIKE_NEW">Like New</option>
+              <option value="VERY_GOOD">Very Good</option>
+              <option value="GOOD">Good</option>
+            </select>
+          </div>
+
+          <div class="divider"></div>
+
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" style="flex:1" onclick="listBothPlatforms()" id="btn-list-both">
+              ⚡ List on Both Platforms
+            </button>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:8px">
+            <button class="btn btn-ebay" style="flex:1" onclick="listEbayOnly()" id="btn-list-ebay">
+              🏪 eBay Only
+            </button>
+            <button class="btn btn-shopify" style="flex:1" onclick="listShopifyOnly()" id="btn-list-shopify">
+              🛍️ Shopify Only
+            </button>
+          </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div>
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-title">📊 eBay Result</div>
+            <div id="ebay-list-result">
+              <div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">
+                Fill form and click list to see results
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">📊 Shopify Result</div>
+            <div id="shopify-list-result">
+              <div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">
+                Fill form and click list to see results
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════ PAGE: ALL LISTINGS ═══════ -->
+    <div class="page" id="page-listings">
+      <div class="flex-between mb-16">
+        <div class="section-title" style="margin-bottom:0">📦 All Listings</div>
+        <button class="btn btn-secondary" onclick="loadListings()">🔄 Refresh</button>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('tab-unified', this)">🔗 Unified View</button>
+        <button class="tab-btn" onclick="showTab('tab-ebay-list', this)">🏪 eBay Only</button>
+        <button class="tab-btn" onclick="showTab('tab-shopify-list', this)">🛍️ Shopify Only</button>
+      </div>
+
+      <div class="tab-pane active" id="tab-unified">
+        <div class="card">
+          <div class="table-wrap" id="unified-table">
+            <div style="color:var(--text-muted);text-align:center;padding:30px">Click "Refresh" to load listings</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="tab-ebay-list">
+        <div class="card">
+          <div class="table-wrap" id="ebay-listings-table">
+            <div style="color:var(--text-muted);text-align:center;padding:30px">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane" id="tab-shopify-list">
+        <div class="card">
+          <div class="table-wrap" id="shopify-listings-table">
+            <div style="color:var(--text-muted);text-align:center;padding:30px">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ PAGE: VERIFY LISTING ═══════ -->
+    <div class="page" id="page-verify">
+      <div class="section-title">🔍 Verify Listing (Buyer View)</div>
+
+      <div class="grid-2" style="align-items:start">
+
+        <div class="card">
+          <div class="card-title">🏪 Verify eBay Listing</div>
+          <div class="form-group">
+            <label class="form-label">eBay Listing ID</label>
+            <input class="form-control" id="verify-ebay-id" type="text" placeholder="e.g. 123456789" />
+          </div>
+          <button class="btn btn-ebay btn-full" onclick="verifyEbay()" id="btn-verify-ebay">
+            🔍 Verify on eBay (Buyer API)
+          </button>
+          <div id="ebay-verify-result" style="margin-top:14px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🛍️ Verify Shopify Product</div>
+          <div class="form-group">
+            <label class="form-label">Shopify Product ID</label>
+            <input class="form-control" id="verify-shopify-id" type="text" placeholder="e.g. 9876543210" />
+          </div>
+          <button class="btn btn-shopify btn-full" onclick="verifyShopify()" id="btn-verify-shopify">
+            🔍 Verify on Shopify (Customer API)
+          </button>
+          <div id="shopify-verify-result" style="margin-top:14px"></div>
+        </div>
+
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">ℹ️ What is Buyer-Side Verification?</div>
+        <p style="font-size:13px;color:var(--text-secondary);line-height:1.7">
+          When you list a product via the seller API, it doesn't always confirm the product is <strong>visible to customers</strong>.
+          This verification step calls the <strong>buyer/storefront API</strong> — the same endpoint a real customer's browser would call —
+          to confirm the listing is actually findable. This is a critical QA step that s2.py was missing.
+        </p>
+      </div>
+    </div>
+
+    <!-- ═══════ PAGE: LOGS ═══════ -->
+    <div class="page" id="page-logs">
+      <div class="flex-between mb-16">
+        <div class="section-title" style="margin-bottom:0">📋 Activity Logs</div>
+        <button class="btn btn-secondary btn-sm" onclick="clearLog()">🗑️ Clear Logs</button>
+      </div>
+      <div class="card">
+        <div class="log-panel" id="full-log" style="max-height:500px">
+          <div class="log-entry muted"><span class="log-time">[init]</span> Dashboard started</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-content -->
+</div><!-- /main -->
+
+<!-- ═══════════════ SCRIPTS ═══════════════ -->
+<script>
+const API = ''; // Same origin
+let logEntries = [];
+
+// ══ Logging ══════════════════════════════════════════
+function log(msg, type='info') {
+  const now = new Date();
+  const time = now.toTimeString().slice(0,8);
+  const entry = { time, msg, type };
+  logEntries.unshift(entry);
+  if (logEntries.length > 200) logEntries.pop();
+
+  const line = `<div class="log-entry ${type}"><span class="log-time">[${time}]</span> ${msg}</div>`;
+  document.getElementById('main-log').insertAdjacentHTML('afterbegin', line);
+  const fl = document.getElementById('full-log');
+  if (fl) fl.insertAdjacentHTML('afterbegin', line);
+}
+
+function clearLog() {
+  logEntries = [];
+  document.getElementById('main-log').innerHTML = '';
+  const fl = document.getElementById('full-log');
+  if (fl) fl.innerHTML = '';
+}
+
+// ══ Page Navigation ══════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name)?.classList.add('active');
+  document.getElementById('nav-' + name)?.classList.add('active');
+  const titles = {
+    dashboard: '📊 Dashboard Overview',
+    list: '➕ List New Product',
+    listings: '📦 All Listings',
+    verify: '🔍 Verify Listing',
+    logs: '📋 Activity Logs',
+  };
+  document.getElementById('page-title').textContent = titles[name] || 'Dashboard';
+}
+
+function showTab(tabId, btn) {
+  const parent = btn.closest('.card, .page');
+  parent?.querySelectorAll('.tab-pane').forEach(t => t.classList.remove('active'));
+  parent?.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId)?.classList.add('active');
+  btn.classList.add('active');
+}
+
+// ══ API Helpers ═══════════════════════════════════════
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const resp = await fetch(API + path, opts);
+  return resp.json();
+}
+
+function setLoading(btnId, loading, text='') {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) {
+    btn.dataset.origText = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner"></span> ${text || 'Loading...'}`;
+  } else {
+    btn.innerHTML = btn.dataset.origText || text;
+  }
+}
+
+// ══ Status Refresh ════════════════════════════════════
+async function refreshStatus() {
+  log('Refreshing system status...', 'info');
+  await Promise.all([testEbay(true), testShopify(true), refreshNgrok(), refreshStats()]);
+}
+
+async function refreshNgrok() {
+  try {
+    const data = await api('GET', '/api/ngrok/url');
+    const url = data.url || '(ngrok not running)';
+    document.getElementById('ngrok-url-display').textContent = url;
+    document.getElementById('ngrok-full-url').textContent = url;
+    if (data.connected) log(`ngrok URL: ${url}`, 'success');
+  } catch(e) {
+    document.getElementById('ngrok-url-display').textContent = 'ngrok not detected';
+  }
+}
+
+async function refreshStats() {
+  try {
+    const data = await api('GET', '/api/listings');
+    document.getElementById('stat-synced-count').textContent = data.listings?.filter(l => l.synced).length ?? '—';
+    document.getElementById('stat-ebay-count').textContent = data.ebay_count ?? '—';
+    document.getElementById('stat-shopify-count').textContent = data.shopify_count ?? '—';
+  } catch(e) { /* silent */ }
+}
+
+function copyNgrok() {
+  const url = document.getElementById('ngrok-full-url').textContent;
+  if (url && !url.includes('not')) {
+    navigator.clipboard.writeText(url).then(() => log('ngrok URL copied to clipboard ✅', 'success'));
+  }
+}
+
+// ══ Platform Tests ════════════════════════════════════
+async function testEbay(silent=false) {
+  if (!silent) {
+    setLoading('btn-test-ebay', true, 'Testing...');
+    log('Testing eBay connection...', 'info');
+  }
+  const badge = document.getElementById('ebay-badge');
+  const meta = document.getElementById('ebay-meta');
+  try {
+    const data = await api('GET', '/api/ebay/status');
+    if (data.connected) {
+      badge.className = 'badge success';
+      badge.textContent = '✅ Connected';
+      meta.innerHTML = `
+        <div>Seller: <span>${data.seller}</span></div>
+        <div>Env: <span>${data.environment}</span></div>
+        <div id="ebay-token-info">Token expires in: <span>${data.token_expires_in_minutes} min</span></div>`;
+      if (!silent) log(`eBay connected — token expires in ${data.token_expires_in_minutes} minutes`, 'success');
+    } else {
+      badge.className = 'badge error';
+      badge.textContent = '❌ Error';
+      meta.innerHTML = `<div style="color:var(--danger)">${data.message}</div>`;
+      if (!silent) log('eBay connection failed: ' + data.message, 'error');
+    }
+  } catch(e) {
+    badge.className = 'badge error'; badge.textContent = '❌ Error';
+    if (!silent) log('eBay test error: ' + e.message, 'error');
+  }
+  if (!silent) setLoading('btn-test-ebay', false);
+}
+
+async function testShopify(silent=false) {
+  if (!silent) {
+    setLoading('btn-test-shopify', true, 'Testing...');
+    log('Testing Shopify connection...', 'info');
+  }
+  const badge = document.getElementById('shopify-badge');
+  const meta = document.getElementById('shopify-meta');
+  try {
+    const data = await api('GET', '/api/shopify/status');
+    if (data.connected) {
+      badge.className = 'badge success';
+      badge.textContent = '✅ Connected';
+      meta.innerHTML = `
+        <div>Shop: <span>${data.shop_name}</span></div>
+        <div>Domain: <span>${data.domain}</span></div>
+        <div id="shopify-plan-info">Plan: <span>${data.plan}</span></div>`;
+      if (!silent) log(`Shopify connected — ${data.shop_name} (${data.plan})`, 'success');
+    } else {
+      badge.className = 'badge error'; badge.textContent = '❌ Error';
+      meta.innerHTML = `<div style="color:var(--danger)">${data.message}</div>`;
+      if (!silent) log('Shopify connection failed: ' + data.message, 'error');
+    }
+  } catch(e) {
+    badge.className = 'badge error'; badge.textContent = '❌ Error';
+    if (!silent) log('Shopify test error: ' + e.message, 'error');
+  }
+  if (!silent) setLoading('btn-test-shopify', false);
+}
+
+// ══ Listing ═══════════════════════════════════════════
+function getFormData() {
+  return {
+    title: document.getElementById('f-title').value.trim(),
+    description: document.getElementById('f-desc').value.trim(),
+    sku: document.getElementById('f-sku').value.trim(),
+    price: parseFloat(document.getElementById('f-price').value) || 19.99,
+    quantity: parseInt(document.getElementById('f-qty').value) || 10,
+    category_id: document.getElementById('f-category').value.trim() || '9355',
+    condition: document.getElementById('f-condition').value,
+  };
+}
+
+function renderListResult(containerId, data, platform) {
+  const el = document.getElementById(containerId);
+  const isEbay = platform === 'ebay';
+  if (data.success) {
+    el.innerHTML = `
+      <div class="result-panel">
+        <div class="result-row">
+          <span class="result-label">Status</span>
+          <span class="badge success">✅ ${data.message}</span>
+        </div>
+        <div class="result-row">
+          <span class="result-label">Listing ID</span>
+          <span class="result-value">${data.listing_id}</span>
+        </div>
+        <div class="result-row">
+          <span class="result-label">SKU</span>
+          <span class="result-value">${data.sku}</span>
+        </div>
+        <div class="result-row">
+          <span class="result-label">Buyer URL</span>
+          <span class="result-value"><a href="${data.listing_url}" target="_blank">🔗 Open in new tab</a></span>
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <button class="btn ${isEbay ? 'btn-ebay' : 'btn-shopify'} btn-sm btn-full" 
+          onclick="${isEbay ? 'verifyEbayId' : 'verifyShopifyId'}('${data.listing_id}', '${containerId}-verify')">
+          🔍 Verify Buyer Can See It
+        </button>
+        <div id="${containerId}-verify" style="margin-top:8px"></div>
+      </div>`;
+  } else {
+    el.innerHTML = `
+      <div class="result-panel">
+        <div class="badge error">❌ Failed</div>
+        <div style="margin-top:10px;font-size:12.5px;color:var(--text-secondary)">${data.message}</div>
+      </div>`;
+  }
+}
+
+async function listBothPlatforms() {
+  const formData = getFormData();
+  if (!formData.title || !formData.sku) {
+    log('Please fill in Title and SKU fields', 'warning');
+    return;
+  }
+  setLoading('btn-list-both', true, 'Listing on both platforms...');
+  log(`Listing "${formData.title}" on eBay + Shopify...`, 'info');
+
+  document.getElementById('ebay-list-result').innerHTML = `<div style="text-align:center;padding:20px"><span class="spinner"></span><div style="margin-top:8px;color:var(--text-muted);font-size:12px">Listing on eBay...</div></div>`;
+  document.getElementById('shopify-list-result').innerHTML = `<div style="text-align:center;padding:20px"><span class="spinner"></span><div style="margin-top:8px;color:var(--text-muted);font-size:12px">Listing on Shopify...</div></div>`;
+
+  try {
+    const data = await api('POST', '/api/sync/listings', formData);
+    renderListResult('ebay-list-result', data.ebay, 'ebay');
+    renderListResult('shopify-list-result', data.shopify, 'shopify');
+
+    if (data.both_success) log(`✅ "${formData.title}" listed on BOTH platforms!`, 'success');
+    else {
+      if (data.ebay.success) log(`✅ eBay listing created: ${data.ebay.listing_id}`, 'success');
+      else log(`❌ eBay failed: ${data.ebay.message}`, 'error');
+      if (data.shopify.success) log(`✅ Shopify product created: ${data.shopify.listing_id}`, 'success');
+      else log(`❌ Shopify failed: ${data.shopify.message}`, 'error');
+    }
+  } catch(e) {
+    log('Error listing products: ' + e.message, 'error');
+  }
+  setLoading('btn-list-both', false);
+}
+
+async function listEbayOnly() {
+  const formData = getFormData();
+  if (!formData.title || !formData.sku) { log('Please fill Title and SKU', 'warning'); return; }
+  setLoading('btn-list-ebay', true, 'Listing on eBay...');
+  log(`Listing "${formData.title}" on eBay only...`, 'info');
+  document.getElementById('ebay-list-result').innerHTML = `<div style="text-align:center;padding:20px"><span class="spinner"></span></div>`;
+  try {
+    const data = await api('POST', '/api/ebay/listings', formData);
+    renderListResult('ebay-list-result', data, 'ebay');
+    log(data.success ? `✅ eBay listing: ${data.listing_id}` : `❌ eBay: ${data.message}`, data.success ? 'success' : 'error');
+  } catch(e) { log('Error: ' + e.message, 'error'); }
+  setLoading('btn-list-ebay', false);
+}
+
+async function listShopifyOnly() {
+  const formData = getFormData();
+  if (!formData.title || !formData.sku) { log('Please fill Title and SKU', 'warning'); return; }
+  setLoading('btn-list-shopify', true, 'Listing on Shopify...');
+  log(`Listing "${formData.title}" on Shopify only...`, 'info');
+  document.getElementById('shopify-list-result').innerHTML = `<div style="text-align:center;padding:20px"><span class="spinner"></span></div>`;
+  try {
+    const data = await api('POST', '/api/shopify/listings', formData);
+    renderListResult('shopify-list-result', data, 'shopify');
+    log(data.success ? `✅ Shopify product: ${data.listing_id}` : `❌ Shopify: ${data.message}`, data.success ? 'success' : 'error');
+  } catch(e) { log('Error: ' + e.message, 'error'); }
+  setLoading('btn-list-shopify', false);
+}
+
+// ══ Verify ════════════════════════════════════════════
+async function verifyEbay() {
+  const id = document.getElementById('verify-ebay-id').value.trim();
+  if (!id) { log('Enter an eBay listing ID', 'warning'); return; }
+  setLoading('btn-verify-ebay', true, 'Verifying...');
+  log(`Verifying eBay listing ${id} from buyer perspective...`, 'info');
+  try {
+    const data = await api('GET', `/api/ebay/listings/${id}/verify`);
+    renderVerifyResult('ebay-verify-result', data, 'ebay');
+    log(data.visible ? `✅ eBay ${id} is visible to buyers` : `⚠️ eBay ${id}: ${data.message}`, data.visible ? 'success' : 'warning');
+  } catch(e) { log('Error: ' + e.message, 'error'); }
+  setLoading('btn-verify-ebay', false);
+}
+
+async function verifyShopify() {
+  const id = document.getElementById('verify-shopify-id').value.trim();
+  if (!id) { log('Enter a Shopify product ID', 'warning'); return; }
+  setLoading('btn-verify-shopify', true, 'Verifying...');
+  log(`Verifying Shopify product ${id} from customer perspective...`, 'info');
+  try {
+    const data = await api('GET', `/api/shopify/listings/${id}/verify`);
+    renderVerifyResult('shopify-verify-result', data, 'shopify');
+    log(data.visible ? `✅ Shopify ${id} is visible to customers` : `⚠️ ${data.message}`, data.visible ? 'success' : 'warning');
+  } catch(e) { log('Error: ' + e.message, 'error'); }
+  setLoading('btn-verify-shopify', false);
+}
+
+async function verifyEbayId(id, containerId) {
+  document.getElementById(containerId).innerHTML = '<span class="spinner"></span> Verifying...';
+  try {
+    const data = await api('GET', `/api/ebay/listings/${id}/verify`);
+    renderVerifyResult(containerId, data, 'ebay');
+    log(data.visible ? `✅ eBay listing ${id} confirmed visible` : `⚠️ ${data.message}`, data.visible ? 'success' : 'warning');
+  } catch(e) { document.getElementById(containerId).innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`; }
+}
+
+async function verifyShopifyId(id, containerId) {
+  document.getElementById(containerId).innerHTML = '<span class="spinner"></span> Verifying...';
+  try {
+    const data = await api('GET', `/api/shopify/listings/${id}/verify`);
+    renderVerifyResult(containerId, data, 'shopify');
+    log(data.visible ? `✅ Shopify product ${id} confirmed visible` : `⚠️ ${data.message}`, data.visible ? 'success' : 'warning');
+  } catch(e) { document.getElementById(containerId).innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`; }
+}
+
+function renderVerifyResult(containerId, data, platform) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const color = platform === 'ebay' ? 'ebay-color' : 'shopify-color';
+  el.innerHTML = `
+    <div class="result-panel">
+      <div class="result-row">
+        <span class="result-label">Buyer Visible?</span>
+        <span class="badge ${data.visible ? 'success' : 'warning'}">${data.visible ? '✅ Visible' : '⚠️ Check'}</span>
+      </div>
+      ${data.title ? `<div class="result-row"><span class="result-label">Title</span><span class="result-value">${data.title}</span></div>` : ''}
+      ${data.price ? `<div class="result-row"><span class="result-label">Price</span><span class="result-value">$${data.price}</span></div>` : ''}
+      <div class="result-row">
+        <span class="result-label">Note</span>
+        <span class="result-value" style="font-family:inherit;font-size:12px">${data.message}</span>
+      </div>
+      ${data.buyer_url ? `<div class="result-row"><span class="result-label">Buyer URL</span><span class="result-value"><a href="${data.buyer_url}" target="_blank">🔗 Open</a></span></div>` : ''}
+    </div>`;
+}
+
+// ══ All Listings ══════════════════════════════════════
+async function loadListings() {
+  log('Loading listings from both platforms...', 'info');
+  try {
+    const data = await api('GET', '/api/listings');
+    renderUnifiedTable(data.listings || []);
+
+    const ebayData = await api('GET', '/api/ebay/listings');
+    renderPlatformTable('ebay-listings-table', ebayData.listings || [], 'ebay');
+
+    const shopifyData = await api('GET', '/api/shopify/listings');
+    renderPlatformTable('shopify-listings-table', shopifyData.listings || [], 'shopify');
+
+    log(`Loaded: ${data.ebay_count} eBay + ${data.shopify_count} Shopify listings`, 'success');
+    document.getElementById('stat-ebay-count').textContent = data.ebay_count ?? 0;
+    document.getElementById('stat-shopify-count').textContent = data.shopify_count ?? 0;
+    document.getElementById('stat-synced-count').textContent = data.listings?.filter(l => l.synced).length ?? 0;
+  } catch(e) { log('Error loading listings: ' + e.message, 'error'); }
+}
+
+function renderUnifiedTable(listings) {
+  const el = document.getElementById('unified-table');
+  if (!listings.length) { el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted)">No listings found</div>'; return; }
+  el.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>SKU</th><th>Title</th><th>eBay Status</th><th>Shopify Status</th><th>Synced?</th>
+      </tr></thead>
+      <tbody>
+        ${listings.map(l => `<tr>
+          <td class="bold">${l.sku}</td>
+          <td>${l.ebay?.title || l.shopify?.title || '—'}</td>
+          <td>${l.ebay ? `<span class="badge success">✅ ${l.ebay.quantity} qty</span>` : '<span class="badge error">❌ Not listed</span>'}</td>
+          <td>${l.shopify ? `<span class="badge success">✅ ${l.shopify.quantity} qty</span>` : '<span class="badge error">❌ Not listed</span>'}</td>
+          <td>${l.synced ? '<span class="badge success">🔗 Synced</span>' : '<span class="badge warning">⚠️ Partial</span>'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderPlatformTable(elId, listings, platform) {
+  const el = document.getElementById(elId);
+  if (!listings.length) { el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted)">No listings found</div>'; return; }
+  const isEbay = platform === 'ebay';
+  el.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>SKU</th><th>Title</th><th>Qty</th>${isEbay ? '' : '<th>Price</th>'}<th>Status</th><th>Action</th>
+      </tr></thead>
+      <tbody>
+        ${listings.map(l => `<tr>
+          <td class="bold">${l.sku || l.listing_id}</td>
+          <td>${l.title}</td>
+          <td>${l.quantity ?? '—'}</td>
+          ${isEbay ? '' : `<td>$${l.price}</td>`}
+          <td><span class="badge success">✅ Active</span></td>
+          <td>
+            ${isEbay
+              ? `<button class="btn btn-ebay btn-sm" onclick="verifyEbayId('${l.listing_id || l.sku}','verify-inline-${l.sku}')">🔍 Verify</button>`
+              : `<button class="btn btn-shopify btn-sm" onclick="verifyShopifyId('${l.listing_id}','verify-inline-${l.listing_id}')">🔍 Verify</button>`}
+          </td>
+        </tr>
+        <tr id="verify-inline-${l.sku || l.listing_id}-row" style="display:none">
+          <td colspan="6"><div id="verify-inline-${l.sku || l.listing_id}"></div></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ══ Init ═══════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  log('Connecting to FYP Inventory Sync API...', 'muted');
+  setTimeout(() => {
+    refreshStatus();
+    log('Dashboard ready — all systems initialized', 'success');
+  }, 500);
+});
+</script>
+
+</body>
+</html>
