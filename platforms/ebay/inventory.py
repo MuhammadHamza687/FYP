@@ -146,7 +146,16 @@ def create_listing(title: str, description: str, price: float, quantity: int,
     """
     Full eBay listing flow:
     location → inventory item → policies → offer → publish
+    Re-listing the same SKU updates the inventory item and reuses the existing offer.
     """
+    try:
+        return _create_listing_inner(title, description, price, quantity, sku, category_id, condition)
+    except Exception as e:
+        return ListingResult(success=False, platform="ebay", sku=sku, message=str(e))
+
+
+def _create_listing_inner(title: str, description: str, price: float, quantity: int,
+                          sku: str, category_id: str, condition: str) -> ListingResult:
     token = get_access_token()
     headers = get_auth_headers(token)
 
@@ -187,6 +196,7 @@ def create_listing(title: str, description: str, price: float, quantity: int,
 
     offer_resp = requests.post(f"{settings.ebay_base_inventory}/offer", headers=headers, json=offer_data)
     offer_id = None
+    sku_collision = False
 
     if offer_resp.status_code == 201:
         offer_id = offer_resp.json().get("offerId")
@@ -198,6 +208,7 @@ def create_listing(title: str, description: str, price: float, quantity: int,
         if offers:
             offer_id = offers[0]["offerId"]
             requests.put(f"{settings.ebay_base_inventory}/offer/{offer_id}", headers=headers, json=offer_data)
+            sku_collision = True
         else:
             return ListingResult(success=False, platform="ebay", message="Offer exists but couldn't retrieve it")
     else:
@@ -208,10 +219,11 @@ def create_listing(title: str, description: str, price: float, quantity: int,
     pub_resp = requests.post(f"{settings.ebay_base_inventory}/offer/{offer_id}/publish", headers=headers)
     if pub_resp.status_code == 200:
         listing_id = pub_resp.json().get("listingId")
+        reused = "SKU already existed — inventory/offer updated and published" if sku_collision else "Published successfully"
         return ListingResult(
             success=True, platform="ebay", listing_id=listing_id, sku=sku,
             listing_url=f"https://sandbox.ebay.com/itm/{listing_id}",
-            message="Published successfully",
+            message=reused,
         )
     elif pub_resp.status_code == 400 and 25002 in _get_error_ids(pub_resp):
         # Already published — get listing ID from offer
@@ -230,59 +242,111 @@ def create_listing(title: str, description: str, price: float, quantity: int,
 def verify_listing(listing_id: str) -> VerifyResult:
     """
     Verify the listing is visible from the BUYER side.
-    Uses eBay Browse API (customer-facing endpoint).
+    Prefer eBay Browse API; fall back to published-offer lookup (sandbox Browse is often scoped out).
     """
     token = get_access_token()
-    # Browse API uses a different scope — check if item is findable
+    buyer_url = f"https://sandbox.ebay.com/itm/{listing_id}"
     resp = requests.get(
         f"{settings.ebay_browse_base}/item/v1|{listing_id}|0",
         headers={
             "Authorization": f"Bearer {token}",
             "X-EBAY-C-MARKETPLACE-ID": MARKETPLACE_ID,
         },
+        timeout=20,
     )
 
     if resp.status_code == 200:
         data = resp.json()
         return VerifyResult(
             visible=True, platform="ebay", listing_id=listing_id,
-            buyer_url=f"https://sandbox.ebay.com/itm/{listing_id}",
+            buyer_url=buyer_url,
             title=data.get("title", ""),
-            price=data.get("price", {}).get("value", ""),
+            price=str(data.get("price", {}).get("value", "")),
             quantity=data.get("estimatedAvailabilities", [{}])[0].get("estimatedAvailableQuantity", 0),
             message="Listing is visible to buyers ✅",
         )
-    else:
-        # Browse API may not work in sandbox — fall back to seller-side check
-        seller_resp = requests.get(
-            f"{settings.ebay_base_inventory}/offer",
-            headers=get_auth_headers(token),
-            params={"sku": listing_id},
-        )
-        # Try inventory check
+
+    offer = _find_offer_by_listing_id(listing_id)
+    if offer:
+        listing = offer.get("listing") or {}
+        status = offer.get("status", "")
+        listing_status = listing.get("listingStatus", "")
+        published = status == "PUBLISHED" or listing_status == "ACTIVE"
+        price = (offer.get("pricingSummary") or {}).get("price") or offer.get("price") or {}
         return VerifyResult(
-            visible=resp.status_code != 404,
-            platform="ebay", listing_id=listing_id,
-            buyer_url=f"https://sandbox.ebay.com/itm/{listing_id}",
-            message=f"Browse API status: {resp.status_code} (Sandbox limitation — item is listed)",
+            visible=published, platform="ebay", listing_id=listing_id,
+            buyer_url=buyer_url,
+            title=offer.get("listingDescription", "")[:80],
+            price=str(price.get("value", "")),
+            quantity=int(offer.get("availableQuantity") or offer.get("quantity") or 0),
+            message=(
+                f"Published offer found (status={status or listing_status}). "
+                f"Browse API returned {resp.status_code} in sandbox."
+            ),
         )
+
+    return VerifyResult(
+        visible=False, platform="ebay", listing_id=listing_id,
+        buyer_url=buyer_url,
+        message=f"Listing not found on Browse API ({resp.status_code}) or in published offers",
+    )
+
+
+def _find_offer_by_listing_id(listing_id: str) -> dict | None:
+    token = get_access_token()
+    resp = requests.get(
+        f"{settings.ebay_base_inventory}/offer",
+        headers=get_auth_headers(token),
+        params={"limit": "200", "offset": "0"},
+        timeout=20,
+    )
+    if resp.status_code != 200:
+        return None
+    for offer in resp.json().get("offers", []):
+        listing = offer.get("listing") or {}
+        if str(listing.get("listingId", "")) == str(listing_id):
+            return offer
+        if str(offer.get("offerId", "")) == str(listing_id):
+            return offer
+    return None
 
 
 def get_all_listings() -> list[dict]:
-    """Fetch all inventory items from eBay seller account."""
+    """Fetch all inventory items from eBay seller account, merged with published listing IDs."""
     token = get_access_token()
+    headers = get_auth_headers(token)
     resp = requests.get(f"{settings.ebay_base_inventory}/inventory_item",
-                        headers=get_auth_headers(token))
+                        headers=headers, params={"limit": "200"})
     if resp.status_code != 200:
         return []
-    items = resp.json().get("inventoryItems", [])
+
+    offers_by_sku: dict[str, dict] = {}
+    offers_resp = requests.get(
+        f"{settings.ebay_base_inventory}/offer",
+        headers=headers,
+        params={"limit": "200"},
+        timeout=20,
+    )
+    if offers_resp.status_code == 200:
+        for offer in offers_resp.json().get("offers", []):
+            sku = offer.get("sku")
+            if sku:
+                offers_by_sku[sku] = offer
+
     result = []
-    for item in items:
+    for item in resp.json().get("inventoryItems", []):
+        sku = item.get("sku")
+        offer = offers_by_sku.get(sku, {})
+        listing = offer.get("listing") or {}
+        price = (offer.get("pricingSummary") or {}).get("price") or offer.get("price") or {}
         result.append({
-            "sku": item.get("sku"),
+            "sku": sku,
+            "listing_id": listing.get("listingId", ""),
             "title": item.get("product", {}).get("title", ""),
             "quantity": item.get("availability", {}).get("shipToLocationAvailability", {}).get("quantity", 0),
+            "price": price.get("value", ""),
             "condition": item.get("condition"),
+            "status": offer.get("status", listing.get("listingStatus", "")),
             "platform": "ebay",
         })
     return result

@@ -85,24 +85,29 @@ def create_ebay_listing(data: dict):
     Body: {title, description, price, quantity, sku, category_id, condition}
     """
     from platforms.ebay.inventory import create_listing
-    result = create_listing(
-        title=data.get("title", "Test Product"),
-        description=data.get("description", ""),
-        price=float(data.get("price", 19.99)),
-        quantity=int(data.get("quantity", 10)),
-        sku=data.get("sku", "SKU-001"),
-        category_id=data.get("category_id", "9355"),
-        condition=data.get("condition", "NEW"),
-    )
-    return result.to_dict()
+    try:
+        result = create_listing(
+            title=data.get("title", "Test Product"),
+            description=data.get("description", ""),
+            price=float(data.get("price", 19.99)),
+            quantity=int(data.get("quantity", 10)),
+            sku=data.get("sku", "SKU-001"),
+            category_id=data.get("category_id", "9355"),
+            condition=data.get("condition", "NEW"),
+        )
+        return result.to_dict()
+    except Exception as e:
+        return {"success": False, "platform": "ebay", "message": str(e)}
 
 
 @router.get("/ebay/listings/{listing_id}/verify")
 def verify_ebay_listing(listing_id: str):
     """Verify an eBay listing is visible from the BUYER side."""
     from platforms.ebay.inventory import verify_listing
-    result = verify_listing(listing_id)
-    return result.to_dict()
+    try:
+        return verify_listing(listing_id).to_dict()
+    except Exception as e:
+        return {"visible": False, "platform": "ebay", "listing_id": listing_id, "message": str(e)}
 
 
 @router.get("/ebay/listings")
@@ -138,23 +143,28 @@ def create_shopify_listing(data: dict):
     Body: {title, description, price, quantity, sku, condition}
     """
     from platforms.shopify.inventory import create_listing
-    result = create_listing(
-        title=data.get("title", "Test Product"),
-        description=data.get("description", ""),
-        price=float(data.get("price", 19.99)),
-        quantity=int(data.get("quantity", 10)),
-        sku=data.get("sku", "SKU-001"),
-        condition=data.get("condition", "NEW"),
-    )
-    return result.to_dict()
+    try:
+        result = create_listing(
+            title=data.get("title", "Test Product"),
+            description=data.get("description", ""),
+            price=float(data.get("price", 19.99)),
+            quantity=int(data.get("quantity", 10)),
+            sku=data.get("sku", "SKU-001"),
+            condition=data.get("condition", "NEW"),
+        )
+        return result.to_dict()
+    except Exception as e:
+        return {"success": False, "platform": "shopify", "message": str(e)}
 
 
 @router.get("/shopify/listings/{product_id}/verify")
 def verify_shopify_listing(product_id: str):
     """Verify a Shopify product is visible to customers (storefront API check)."""
     from platforms.shopify.inventory import verify_listing
-    result = verify_listing(product_id)
-    return result.to_dict()
+    try:
+        return verify_listing(product_id).to_dict()
+    except Exception as e:
+        return {"visible": False, "platform": "shopify", "listing_id": product_id, "message": str(e)}
 
 
 @router.get("/shopify/listings")
@@ -188,27 +198,28 @@ def sync_listing_both_platforms(data: dict):
     List the same product on BOTH eBay and Shopify simultaneously.
     Returns results for both platforms in one response.
     """
+    from platforms.base import ListingResult
     from platforms.ebay.inventory import create_listing as ebay_create
     from platforms.shopify.inventory import create_listing as shopify_create
 
-    ebay_result = ebay_create(
+    payload = dict(
         title=data.get("title", "Test Product"),
         description=data.get("description", ""),
         price=float(data.get("price", 19.99)),
         quantity=int(data.get("quantity", 10)),
         sku=data.get("sku", "SKU-001"),
-        category_id=data.get("category_id", "9355"),
         condition=data.get("condition", "NEW"),
     )
 
-    shopify_result = shopify_create(
-        title=data.get("title", "Test Product"),
-        description=data.get("description", ""),
-        price=float(data.get("price", 19.99)),
-        quantity=int(data.get("quantity", 10)),
-        sku=data.get("sku", "SKU-001"),
-        condition=data.get("condition", "NEW"),
-    )
+    try:
+        ebay_result = ebay_create(**payload, category_id=data.get("category_id", "9355"))
+    except Exception as e:
+        ebay_result = ListingResult(success=False, platform="ebay", sku=payload["sku"], message=str(e))
+
+    try:
+        shopify_result = shopify_create(**payload)
+    except Exception as e:
+        shopify_result = ListingResult(success=False, platform="shopify", sku=payload["sku"], message=str(e))
 
     return {
         "ebay": ebay_result.to_dict(),
